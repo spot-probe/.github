@@ -31,8 +31,8 @@ Rust 写的轻量服务器探针：agent 经 WebSocket / JSON-RPC 2.0 上报，h
 ## 与上游的差别
 
 - **公开状态页主题**：浅色语义配色、明暗两套、全部过 WCAG AA；分组页签、筛选与搜索、列表视图；
-  图表调色板重建（排除与状态色冲突的绿 / 琥珀 / 红）；卡片与详情页重构；
-  国家旗与发行版图标、在线时长徽章
+  图表调色板重建（排除与状态色冲突的绿 / 琥珀 / 红），资源图表有悬停卡片与十字线；
+  卡片与详情页重构；国家旗与发行版图标、在线时长徽章
 - **可用率与故障历史**：`uptime{d7,d30}` 与 `series=availability` 接口，公开页出时间轴与故障列表
 - **品牌**：产品名 **Spot Monitor**，自带 favicon 与 `og:image`；文档站配色与主题同源
 - **文档**：全站按本 fork 的**实际行为**重写（hub 的添加节点判定、agent 的真实参数、
@@ -44,7 +44,7 @@ Rust 写的轻量服务器探针：agent 经 WebSocket / JSON-RPC 2.0 上报，h
 |:--|:--|:--|
 | monitor | [v1.5.3](https://github.com/spot-probe/monitor/releases/tag/v1.5.3) | 两个 musl 架构的 hub 二进制 + `sha256sums.txt` |
 | agent | [v1.1.0](https://github.com/spot-probe/agent/releases/tag/v1.1.0) | 两个 musl 架构的 agent 二进制 + `sha256sums.txt` |
-| monitor-theme-default | [v1.5.1](https://github.com/spot-probe/monitor-theme-default/releases/tag/v1.5.1) | `theme.tar.gz` + `theme.tar.gz.sha256` |
+| monitor-theme-default | [v1.6.0](https://github.com/spot-probe/monitor-theme-default/releases/tag/v1.6.0) | `theme.tar.gz` + `theme.tar.gz.sha256` |
 | monitor-document | — | 无 release，由 Cloudflare Workers 构建发布 |
 
 hub 内置的主题版本由 `monitor` 仓库里的 `web-theme.pin` 钉住（含 sha256），升级要 pin 与版本号一起改。
