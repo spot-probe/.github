@@ -47,6 +47,10 @@ Rust 写的轻量服务器探针：agent 经 WebSocket / JSON-RPC 2.0 上报，h
 - **可用率与故障历史**：`uptime{d7,d30}` 与 `series=availability` 接口，公开页出时间轴与故障列表
 - **升级路径**：agent 重跑一次安装命令即升级（带备份与失败回滚），文档给了把命令发到每台机器的几种做法；
   hub 的安装器可以自我更新，发布产物里带 `install-hub.sh`
+- **装完自检**：agent 安装器收尾不再只说一句「去看日志」，而是带超时去日志里等第一条 `connected to`
+  （服务 `active` 不等于在报数——token 或地址错了会一直重连而服务始终是 active），再打印实测事实
+  `monitor-agent is running (pid N)` 与 `connected to <hub>`；连不上就大声警告但不让安装失败，
+  并给出**真实路径**的 `${BIN} --ping 1.1.1.1` 自检命令与 `net.ipv4.ping_group_range` 的前提检查
 - **节点地址与国家**：按节点自身地址查，也可以手填
 - **品牌**：产品名 **Spot Monitor**，自带 favicon 与 `og:image`；文档站配色与主题同源
 - **文档**：全站按本 fork 的**实际行为**重写（hub 的添加节点判定、agent 的真实参数、
@@ -56,7 +60,7 @@ Rust 写的轻量服务器探针：agent 经 WebSocket / JSON-RPC 2.0 上报，h
 
 | 仓库 | 最新发布 | 产物 |
 |:--|:--|:--|
-| monitor | [v1.8.8](https://github.com/spot-probe/monitor/releases/tag/v1.8.8) | 两个 musl 架构的 hub 二进制 + `install-hub.sh` + `sha256sums.txt` |
+| monitor | [v1.8.9](https://github.com/spot-probe/monitor/releases/tag/v1.8.9) | 两个 musl 架构的 hub 二进制 + `install-hub.sh` + `sha256sums.txt` |
 | agent | [v1.1.2](https://github.com/spot-probe/agent/releases/tag/v1.1.2) | 两个 musl 架构的 agent 二进制 + `sha256sums.txt` |
 | monitor-theme-default | [v1.8.5](https://github.com/spot-probe/monitor-theme-default/releases/tag/v1.8.5) | `theme.tar.gz` + `theme.tar.gz.sha256` |
 | monitor-document | — | 无 release，由 Cloudflare Workers 构建发布 |
