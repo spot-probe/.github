@@ -41,7 +41,11 @@ Rust 写的轻量服务器探针：agent 经 WebSocket / JSON-RPC 2.0 上报，h
 - **后台重做**：新增「**总览**」页并作为默认落地页 —— 一行 KPI（在线 / 离线 / 总数 / 待升级 /
   30 天内到期 / 已过期）、一张**续费日历**（每天挂「N 台」，集中到期日高亮，点某天看那天的节点）、
   近期事项与 Agent 版本一览；全队趋势图（流量 / 带宽 / 资源，资源图带「最热那台」的 P95 分布带）。
-  延迟页能展开看**哪台节点在拖后腿**（分桶直方图 + 百分位区间带），节点表有「只看待升级」开关
+  延迟页能展开看**哪台节点在拖后腿**（分桶直方图 + 百分位区间带），节点表有「只看待升级」开关；
+  节点还可以加一条**私有备注**——只在管理后台出现，公开页任何情况下都不显示
+- **成本视图**：新增汇率模块与 `GET /api/fx`，各币种折成 CNY（缓存 + 手动覆盖），成本页给出
+  未到期当月开销与剩余价值。有一条硬约束：**绝不回退成 1:1**——取不到就用上一次的值，并在页面上
+  标明它有多旧；悄悄按 1:1 算的话 `$50` 会被当成 `¥50`，总额少算七倍而页面看起来完全正常
 - **延迟监控支持 ICMP**：每条任务可选探测方式，**默认仍是 TCP**，现有任务不受影响。
   ICMP 只写裸主机或 IP（`1.1.1.1`、`example.com`、`2606:4700:4700::1111`），带端口会被拒绝并提示正确写法，
   IPv4 与 IPv6 都支持；`monitor-agent --ping <host>` 可以在目标机器上先自检能不能发 ICMP、
@@ -50,10 +54,16 @@ Rust 写的轻量服务器探针：agent 经 WebSocket / JSON-RPC 2.0 上报，h
 - **历史保留 7 → 90 天**（可设 1–365）：分钟数据折叠进小时汇总表，长窗口跨水位线拼接读取；
   `/api/me` 报 `history_days`，公开页的档位阶梯跟着它走，不再写死
 - **可用率与故障历史**：`uptime{d7,d30}` 与 `series=availability` 接口，公开页出时间轴与故障列表
-- **升级路径**：agent 重跑一次安装命令即升级（带备份与失败回滚），文档给了把命令发到每台机器的几种做法；
+- **升级路径（手动 / 批量）**：agent 重跑一次安装命令即升级（带备份与失败回滚），文档给了把命令发到每台机器的几种做法；
   hub 的安装器可以自我更新，发布产物里带 `install-hub.sh`；**升级前自动备份数据库**到
   `数据目录/backups/`（留最近三份），回滚时数据库一并恢复，健康检查还会再问一句端口**是否真的在应答**
   ——`is-active` 只说明进程活着，起来了但没在服务的 hub 从那一句看不出来
+- **可选的远程升级（签名验证）**：agent 把**发布公钥编译进二进制**（不是配置项，**hub 也改不了**），
+  只依赖 `minisign-verify` 验签；私钥从不进仓库——CI 只构建并发出**草稿**，签名在本机离线做、
+  之后转正，而 `releases/latest` 只解析已发布的版本，所以**未签名的草稿产物任何节点都取不到**。
+  节点侧用 `--allow-remote-upgrade` 显式开启（**默认不勾**），开关状态在握手里如实上报；开启后可在
+  面板上对单台节点点「远程升级」（两步确认），hub 用**同一条已认证的 WebSocket** 把公告与二进制推过去，
+  与 `/agent/{arch}` 中继同源。验签通过才替换自己，升级后自检、失败回滚，结果回报到面板
 - **装完自检**：agent 安装器收尾不再只说一句「去看日志」，而是带超时去日志里等第一条 `connected to`
   （服务 `active` 不等于在报数——token 或地址错了会一直重连而服务始终是 active），再打印实测事实
   `monitor-agent is running (pid N)` 与 `connected to <hub>`；连不上就大声警告但不让安装失败，
@@ -61,7 +71,8 @@ Rust 写的轻量服务器探针：agent 经 WebSocket / JSON-RPC 2.0 上报，h
 - **有新版本时通知**：agent 与 hub 的发布都算，搭在每日那次检查上（不另开轮询），
   每个版本只说一次，通知页里可以关掉
 - **节点地址与国家**：按节点自身地址查，也可以手填
-- **品牌**：产品名 **Spot Monitor**，自带 favicon 与 `og:image`；文档站配色与主题同源
+- **品牌**：产品名 **Spot Monitor**，自带 favicon 与 `og:image`；文档站配色与主题同源；
+  标签页图标 / iOS 主屏图标 / 社交预览图**三处各自独立**，可以在设置页里各换一份
 - **文档**：全站按本 fork 的**实际行为**重写（hub 的添加节点判定、agent 的真实参数、
   ICMP 的权限与自检、保留天数的上限、可用率的「无数据 ≠ 离线」语义等）
 
@@ -69,13 +80,14 @@ Rust 写的轻量服务器探针：agent 经 WebSocket / JSON-RPC 2.0 上报，h
 
 | 仓库 | 最新发布 | 产物 |
 |:--|:--|:--|
-| monitor | [v1.9.6](https://github.com/spot-probe/monitor/releases/tag/v1.9.6) | 两个 musl 架构的 hub 二进制 + `install-hub.sh` + `sha256sums.txt` |
-| agent | [v1.1.2](https://github.com/spot-probe/agent/releases/tag/v1.1.2) | 两个 musl 架构的 agent 二进制 + `sha256sums.txt` |
-| monitor-theme-default | [v1.8.6](https://github.com/spot-probe/monitor-theme-default/releases/tag/v1.8.6) | `theme.tar.gz` + `theme.tar.gz.sha256` |
+| monitor | [v1.9.19](https://github.com/spot-probe/monitor/releases/tag/v1.9.19) | 两个 musl 架构的 hub 二进制 + `install-hub.sh` + `sha256sums.txt` |
+| agent | [v1.1.6](https://github.com/spot-probe/agent/releases/tag/v1.1.6) | 两个 musl 架构的 agent 二进制（**各带一份 `.minisig` 签名**）+ `sha256sums.txt` |
+| monitor-theme-default | [v1.8.9](https://github.com/spot-probe/monitor-theme-default/releases/tag/v1.8.9) | `theme.tar.gz` + `theme.tar.gz.sha256` |
 | monitor-document | — | 无 release，由 Cloudflare Workers 构建发布 |
 
-hub 内置的主题版本由 `monitor` 仓库里的 `web-theme.pin` 钉住（含 sha256，当前指向 `v1.8.6`），
-升级要 pin 与版本号一起改。
+hub 内置的主题版本由 `monitor` 仓库里的 `web-theme.pin` 钉住（含发布物的 sha256，当前指向 `v1.8.9`），
+升级要 pin 与版本号一起改。agent 的发布走「CI 出草稿 → 本机离线签名 → 转正」，所以
+`releases/latest` 指向的永远是已签名的那一版。
 
 ## 怎么协作
 
