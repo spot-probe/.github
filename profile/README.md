@@ -41,7 +41,9 @@ Rust 写的轻量服务器探针：agent 经 WebSocket / JSON-RPC 2.0 上报，h
 - **后台重做**：新增「**总览**」页并作为默认落地页 —— 一行 KPI（在线 / 离线 / 总数 / 待升级 /
   30 天内到期 / 已过期）、一张**续费日历**（每天挂「N 台」，集中到期日高亮，点某天看那天的节点）、
   近期事项与 Agent 版本一览；全队趋势图（流量 / 带宽 / 资源，资源图带「最热那台」的 P95 分布带）。
-  延迟页能展开看**哪台节点在拖后腿**（分桶直方图 + 百分位区间带），节点表有「只看待升级」开关；
+  延迟页能展开看**哪台节点在拖后腿**（分桶直方图 + 百分位区间带），并有一张**延迟分布热力图**
+  （区间边界由当前窗口的分位数算，配一行丢包条；分位图按缺口分段，所以「这段彻底不通」在图上看得见，
+  窗口可选 1 小时 / 6 小时 / 24 小时 / 7 天），节点表有「只看待升级」开关；
   节点还可以加一条**私有备注**——只在管理后台出现，公开页任何情况下都不显示
 - **成本视图**：新增汇率模块与 `GET /api/fx`，各币种折成 CNY（缓存 + 手动覆盖），成本页给出
   未到期当月开销与剩余价值。有一条硬约束：**绝不回退成 1:1**——取不到就用上一次的值，并在页面上
@@ -51,6 +53,9 @@ Rust 写的轻量服务器探针：agent 经 WebSocket / JSON-RPC 2.0 上报，h
   IPv4 与 IPv6 都支持；`monitor-agent --ping <host>` 可以在目标机器上先自检能不能发 ICMP、
   不能的话是权限还是路由；**探测失败的原因显示在面板上**，权限不足不再表现为一条没有解释的 100% 丢包；
   agent 太旧时也**明确说出来**（ICMP 需要 agent ≥ 1.1.1，面板在保存任务**之前**就会提示哪些节点太旧）
+- **流媒体解锁探测**：agent 每 6 小时（**按节点错开**、重启不触发风暴）探一次
+  Netflix / ChatGPT / YouTube / Amazon Prime Video / Reddit / TikTok，结果上报后面板有「节点实测」列
+  与探测历史点阵；判据照 xykt 的 IPQuality 实现。与 IP 质量共用同一个许可开关
 - **历史保留 7 → 90 天**（可设 1–365）：分钟数据折叠进小时汇总表，长窗口跨水位线拼接读取；
   `/api/me` 报 `history_days`，公开页的档位阶梯跟着它走，不再写死
 - **可用率与故障历史**：`uptime{d7,d30}` 与 `series=availability` 接口，公开页出时间轴与故障列表
@@ -63,14 +68,22 @@ Rust 写的轻量服务器探针：agent 经 WebSocket / JSON-RPC 2.0 上报，h
   之后转正，而 `releases/latest` 只解析已发布的版本，所以**未签名的草稿产物任何节点都取不到**。
   节点侧用 `--allow-remote-upgrade` 显式开启（**默认不勾**），开关状态在握手里如实上报；开启后可在
   面板上对单台节点点「远程升级」（两步确认），hub 用**同一条已认证的 WebSocket** 把公告与二进制推过去，
-  与 `/agent/{arch}` 中继同源。验签通过才替换自己，升级后自检、失败回滚，结果回报到面板
+  与 `/agent/{arch}` 中继同源。验签通过才替换自己，升级后自检、失败回滚，结果回报到面板；
+  也能**批量下发**（逐台进行、失败即停），成功回执保留 30 分钟、失败留到下一次尝试
 - **装完自检**：agent 安装器收尾不再只说一句「去看日志」，而是带超时去日志里等第一条 `connected to`
   （服务 `active` 不等于在报数——token 或地址错了会一直重连而服务始终是 active），再打印实测事实
   `monitor-agent is running (pid N)` 与 `connected to <hub>`；连不上就大声警告但不让安装失败，
   并给出**真实路径**的 `${BIN} --ping 1.1.1.1` 自检命令与 `net.ipv4.ping_group_range` 的前提检查
-- **有新版本时通知**：agent 与 hub 的发布都算，搭在每日那次检查上（不另开轮询），
-  每个版本只说一次，通知页里可以关掉
+- **通知**：agent 与 hub 有新版本时提醒（搭在每日那次检查上，不另开轮询，每个版本只说一次）；
+  另有**流量报告**——日报 / 周报 / 月报 / 半年报 / 年报，按天快照求和，报文里写明「本期覆盖 N 天」
+  （半年报与年报的诚实底线），明细限 Top 20（Telegram 单条 4096 字符的上限）
 - **节点地址与国家**：按节点自身地址查，也可以手填
+- **IP 质量与风险**：hub 自己下 IP 库（城市 / ASN / Tor 三个镜像可配、URL 支持日期占位符、
+  免费库的压缩包直接解，边收边写盘所以内存与库大小脱钩），**离线也能给出质量**；在线风险库则把
+  多个来源**逐源并列、绝不合成**成一个分数，并有每日额度与节流。两条路都**按节点许可**：
+  `--allow-ip-quality`（**默认关**）没开的节点，本地查询一次都不做、在线接口一个请求都不发——
+  后者才是这个开关最大的理由（否则每台节点的 IP 都会发给第三方）。面板在节点里分别给出 IP 质量、
+  在线风险（带来源名）与本地 Tor 清单，总览页有「IP 质量」视图可横向比较
 - **品牌**：产品名 **Spot Monitor**，自带 favicon 与 `og:image`；文档站配色与主题同源；
   标签页图标 / iOS 主屏图标 / 社交预览图**三处各自独立**，可以在设置页里各换一份
 - **文档**：全站按本 fork 的**实际行为**重写（hub 的添加节点判定、agent 的真实参数、
@@ -80,8 +93,8 @@ Rust 写的轻量服务器探针：agent 经 WebSocket / JSON-RPC 2.0 上报，h
 
 | 仓库 | 最新发布 | 产物 |
 |:--|:--|:--|
-| monitor | [v1.9.19](https://github.com/spot-probe/monitor/releases/tag/v1.9.19) | 两个 musl 架构的 hub 二进制 + `install-hub.sh` + `sha256sums.txt` |
-| agent | [v1.1.6](https://github.com/spot-probe/agent/releases/tag/v1.1.6) | 两个 musl 架构的 agent 二进制（**各带一份 `.minisig` 签名**）+ `sha256sums.txt` |
+| monitor | [v1.11.16](https://github.com/spot-probe/monitor/releases/tag/v1.11.16) | 两个 musl 架构的 hub 二进制 + `install-hub.sh` + `sha256sums.txt` |
+| agent | [v1.1.10](https://github.com/spot-probe/agent/releases/tag/v1.1.10) | 两个 musl 架构的 agent 二进制（**各带一份 `.minisig` 签名**）+ `sha256sums.txt` |
 | monitor-theme-default | [v1.8.9](https://github.com/spot-probe/monitor-theme-default/releases/tag/v1.8.9) | `theme.tar.gz` + `theme.tar.gz.sha256` |
 | monitor-document | — | 无 release，由 Cloudflare Workers 构建发布 |
 
