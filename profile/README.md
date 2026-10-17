@@ -40,7 +40,10 @@ Rust 写的轻量服务器探针：agent 经 WebSocket / JSON-RPC 2.0 上报，h
 - **公开状态页主题**：浅色语义配色、明暗两套、全部过 WCAG AA；分组页签、筛选与搜索、列表视图；
   图表调色板重建（排除与状态色冲突的绿 / 琥珀 / 红），资源图表有悬停卡片与十字线；
   卡片与详情页重构；国家旗与发行版图标、在线时长徽章；速率图标出「均值到峰值」的带；
-  深色模式下浏览器原生控件也用深色；货币一律显示在数字前；续费周期支持任意值（5 年、18 个月）
+  深色模式下浏览器原生控件也用深色；货币一律显示在数字前；续费周期支持任意值（5 年、18 个月）；
+  **速率图用对数纵轴**——速率跨度是数量级（0.2 KB/s 的空闲到 70 MB/s 的突发），线性轴会把平时的
+  流量压成贴底的一条线，对数轴让两者在同一张图里都看得清；档位由保留期生成（保留期本身也算一档）；
+  详情页另有「连接与进程」图，在线状态是一周的日历格
 - **主题可视化配置**：主题在 `theme.json` 里声明配置项，面板据此渲染表单，不用改 hub
   （内置主题目前八项：汇总开关、默认视图、分组页签常驻、四张卡片各一项、速率峰值）；
   主题还可以**直接填 GitHub 仓库地址安装**
@@ -50,7 +53,9 @@ Rust 写的轻量服务器探针：agent 经 WebSocket / JSON-RPC 2.0 上报，h
   延迟页能展开看**哪台节点在拖后腿**（分桶直方图 + 百分位区间带），并有一张**延迟分布热力图**
   （区间边界由当前窗口的分位数算，配一行丢包条；分位图按缺口分段，所以「这段彻底不通」在图上看得见，
   窗口可选 1 小时 / 6 小时 / 24 小时 / 7 天），节点表有「只看待升级」开关；
-  节点还可以加一条**私有备注**——只在管理后台出现，公开页任何情况下都不显示
+  节点还可以加一条**私有备注**——只在管理后台出现，公开页任何情况下都不显示；「30 天内到期」那张
+  KPI 卡点开就是一行一台，行尾「我已续费」二次确认后续一期（也支持按分组续），
+  **由人说「我续了」、hub 只执行**——而不是 hub 自己猜「你没续费」，那会把真正的到期警报盖掉
 - **成本视图**：新增汇率模块与 `GET /api/fx`，各币种折成 CNY（缓存 + 手动覆盖），成本页给出
   未到期当月开销与剩余价值。有一条硬约束：**绝不回退成 1:1**——取不到就用上一次的值，并在页面上
   标明它有多旧；悄悄按 1:1 算的话 `$50` 会被当成 `¥50`，总额少算七倍而页面看起来完全正常
@@ -61,7 +66,9 @@ Rust 写的轻量服务器探针：agent 经 WebSocket / JSON-RPC 2.0 上报，h
   agent 太旧时也**明确说出来**（ICMP 需要 agent ≥ 1.1.1，面板在保存任务**之前**就会提示哪些节点太旧）
 - **流媒体解锁探测**：agent 每 6 小时（**按节点错开**、重启不触发风暴）探一次
   Netflix / ChatGPT / YouTube / Amazon Prime Video / Reddit / TikTok，结果上报后面板有「节点实测」列
-  与探测历史点阵；判据照 xykt 的 IPQuality 实现。与 IP 质量共用同一个许可开关
+  与探测历史点阵；判据照 xykt 的 IPQuality 实现。`monitor-agent --probe-once` 能让 agent 自己说出
+  它到底读到了什么（URL / 状态码 / 正文长度 / 各标记出现次数），不用靠猜。
+  与 IP 质量共用同一个许可开关
 - **历史保留 7 → 90 天**（可设 1–365）：分钟数据折叠进小时汇总表，长窗口跨水位线拼接读取；
   `/api/me` 报 `history_days`，公开页的档位阶梯跟着它走，不再写死
 - **可用率与故障历史**：`uptime{d7,d30}` 与 `series=availability` 接口，公开页出时间轴与故障列表
@@ -89,7 +96,8 @@ Rust 写的轻量服务器探针：agent 经 WebSocket / JSON-RPC 2.0 上报，h
   多个来源**逐源并列、绝不合成**成一个分数，并有每日额度与节流。两条路都**按节点许可**：
   `--allow-ip-quality`（**默认关**）没开的节点，本地查询一次都不做、在线接口一个请求都不发——
   后者才是这个开关最大的理由（否则每台节点的 IP 都会发给第三方）。面板在节点里分别给出 IP 质量、
-  在线风险（带来源名）与本地 Tor 清单，总览页有「IP 质量」视图可横向比较
+  在线风险（带来源名）与本地 Tor 清单，总览页有「IP 质量」视图可横向比较。查询**失败一次不会抹掉
+  上一轮的结论**——每条结论带着自己的时间戳，面板据实显示它有多旧
 - **品牌**：产品名 **Spot Monitor**，自带 favicon 与 `og:image`；文档站配色与主题同源；
   标签页图标 / iOS 主屏图标 / 社交预览图**三处各自独立**，可以在设置页里各换一份
 - **文档**：全站按本 fork 的**实际行为**重写（hub 的添加节点判定、agent 的真实参数、
@@ -99,12 +107,12 @@ Rust 写的轻量服务器探针：agent 经 WebSocket / JSON-RPC 2.0 上报，h
 
 | 仓库 | 最新发布 | 产物 |
 |:--|:--|:--|
-| monitor | [v1.11.16](https://github.com/spot-probe/monitor/releases/tag/v1.11.16) | 两个 musl 架构的 hub 二进制 + `install-hub.sh` + `sha256sums.txt` |
-| agent | [v1.1.10](https://github.com/spot-probe/agent/releases/tag/v1.1.10) | 两个 musl 架构的 agent 二进制（**各带一份 `.minisig` 签名**）+ `sha256sums.txt` |
-| monitor-theme-default | [v1.8.9](https://github.com/spot-probe/monitor-theme-default/releases/tag/v1.8.9) | `theme.tar.gz` + `theme.tar.gz.sha256` |
+| monitor | [v1.12.8](https://github.com/spot-probe/monitor/releases/tag/v1.12.8) | 两个 musl 架构的 hub 二进制 + `install-hub.sh` + `sha256sums.txt` |
+| agent | [v1.1.15](https://github.com/spot-probe/agent/releases/tag/v1.1.15) | 两个 musl 架构的 agent 二进制（**各带一份 `.minisig` 签名**）+ `sha256sums.txt` |
+| monitor-theme-default | [v1.8.14](https://github.com/spot-probe/monitor-theme-default/releases/tag/v1.8.14) | `theme.tar.gz` + `theme.tar.gz.sha256` |
 | monitor-document | — | 无 release，由 Cloudflare Workers 构建发布 |
 
-hub 内置的主题版本由 `monitor` 仓库里的 `web-theme.pin` 钉住（含发布物的 sha256，当前指向 `v1.8.9`），
+hub 内置的主题版本由 `monitor` 仓库里的 `web-theme.pin` 钉住（含发布物的 sha256，当前指向 `v1.8.14`），
 升级要 pin 与版本号一起改。agent 的发布走「CI 出草稿 → 本机离线签名 → 转正」，所以
 `releases/latest` 指向的永远是已签名的那一版。
 
