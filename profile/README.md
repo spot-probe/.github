@@ -43,7 +43,9 @@ Rust 写的轻量服务器探针：agent 经 WebSocket / JSON-RPC 2.0 上报，h
   深色模式下浏览器原生控件也用深色；货币一律显示在数字前；续费周期支持任意值（5 年、18 个月）；
   **速率图用对数纵轴**——速率跨度是数量级（0.2 KB/s 的空闲到 70 MB/s 的突发），线性轴会把平时的
   流量压成贴底的一条线，对数轴让两者在同一张图里都看得清；档位由保留期生成（保留期本身也算一档）；
-  详情页另有「连接与进程」图，在线状态是一周的日历格
+  详情页另有「连接与进程」图，在线状态是一周的日历格；探测的五条线除了颜色还带**线型**
+  （实线 / 长虚 / 点线 / 点划 / 短虚）——颜色不该是唯一的区分手段，对色觉障碍的读者几条线才不至于
+  看起来一样；延迟页的时间范围也放开到了 hub 的保留期
 - **主题可视化配置**：主题在 `theme.json` 里声明配置项，面板据此渲染表单，不用改 hub
   （内置主题目前八项：汇总开关、默认视图、分组页签常驻、四张卡片各一项、速率峰值）；
   主题还可以**直接填 GitHub 仓库地址安装**
@@ -82,14 +84,22 @@ Rust 写的轻量服务器探针：agent 经 WebSocket / JSON-RPC 2.0 上报，h
   节点侧用 `--allow-remote-upgrade` 显式开启（**默认不勾**），开关状态在握手里如实上报；开启后可在
   面板上对单台节点点「远程升级」（两步确认），hub 用**同一条已认证的 WebSocket** 把公告与二进制推过去，
   与 `/agent/{arch}` 中继同源。验签通过才替换自己，升级后自检、失败回滚，结果回报到面板；
+  下发过程**有进度**（取发布物 / 推送 N% / 等待应用 / 等待重连），不会只显示一个「正在升级」；
   也能**批量下发**（逐台进行、失败即停），成功回执保留 30 分钟、失败留到下一次尝试
+- **安装路径也验签**：重跑安装命令时，`install.sh` 会先向 hub 取一份签名（节点常常连不上 GitHub，
+  所以由 hub 转），再用**机器上已经装着的那个旧 agent** 去验新包——脚本自己不懂 Ed25519，而旧 agent
+  里编着公钥。**不匹配就拒绝安装**，取不到签名则打一条明确的警告。首次安装暂时做不到这一点，
+  那时会直说「本机还没有可信校验器」（这是个引导问题：验签器本身也得可信地装进来）。
+  另外给 unit 加了重启上限（5 分钟内崩 5 次就停），一个「启动即崩」的坏版本不会无限重启下去
 - **装完自检**：agent 安装器收尾不再只说一句「去看日志」，而是带超时去日志里等第一条 `connected to`
   （服务 `active` 不等于在报数——token 或地址错了会一直重连而服务始终是 active），再打印实测事实
   `monitor-agent is running (pid N)` 与 `connected to <hub>`；连不上就大声警告但不让安装失败，
   并给出**真实路径**的 `${BIN} --ping 1.1.1.1` 自检命令与 `net.ipv4.ping_group_range` 的前提检查
 - **通知**：agent 与 hub 有新版本时提醒（搭在每日那次检查上，不另开轮询，每个版本只说一次）；
   另有**流量报告**——日报 / 周报 / 月报 / 半年报 / 年报，按天快照求和，报文里写明「本期覆盖 N 天」
-  （半年报与年报的诚实底线），明细限 Top 20（Telegram 单条 4096 字符的上限）
+  （半年报与年报的诚实底线），明细限 Top 20（Telegram 单条 4096 字符的上限）。
+  **Telegram 还能问**：`/status` `/nodes` `/node <名字>` `/traffic` `/probe` 这几个只读命令——
+  走长轮询（自建 hub 常常只有出网），只认设置里的那个会话，投递结果也落库、在面板里看得见
 - **节点地址与国家**：按节点自身地址查，也可以手填
 - **IP 质量与风险**：hub 自己下 IP 库（城市 / ASN / Tor 三个镜像可配、URL 支持日期占位符、
   免费库的压缩包直接解，边收边写盘所以内存与库大小脱钩），**离线也能给出质量**；在线风险库则把
@@ -107,12 +117,12 @@ Rust 写的轻量服务器探针：agent 经 WebSocket / JSON-RPC 2.0 上报，h
 
 | 仓库 | 最新发布 | 产物 |
 |:--|:--|:--|
-| monitor | [v1.12.8](https://github.com/spot-probe/monitor/releases/tag/v1.12.8) | 两个 musl 架构的 hub 二进制 + `install-hub.sh` + `sha256sums.txt` |
-| agent | [v1.1.15](https://github.com/spot-probe/agent/releases/tag/v1.1.15) | 两个 musl 架构的 agent 二进制（**各带一份 `.minisig` 签名**）+ `sha256sums.txt` |
-| monitor-theme-default | [v1.8.14](https://github.com/spot-probe/monitor-theme-default/releases/tag/v1.8.14) | `theme.tar.gz` + `theme.tar.gz.sha256` |
+| monitor | [v1.12.25](https://github.com/spot-probe/monitor/releases/tag/v1.12.25) | 两个 musl 架构的 hub 二进制 + `install-hub.sh` + `sha256sums.txt` |
+| agent | [v1.1.17](https://github.com/spot-probe/agent/releases/tag/v1.1.17) | 两个 musl 架构的 agent 二进制（**各带一份 `.minisig` 签名**）+ `sha256sums.txt` |
+| monitor-theme-default | [v1.8.21](https://github.com/spot-probe/monitor-theme-default/releases/tag/v1.8.21) | `theme.tar.gz` + `theme.tar.gz.sha256` |
 | monitor-document | — | 无 release，由 Cloudflare Workers 构建发布 |
 
-hub 内置的主题版本由 `monitor` 仓库里的 `web-theme.pin` 钉住（含发布物的 sha256，当前指向 `v1.8.14`），
+hub 内置的主题版本由 `monitor` 仓库里的 `web-theme.pin` 钉住（含发布物的 sha256，当前指向 `v1.8.21`），
 升级要 pin 与版本号一起改。agent 的发布走「CI 出草稿 → 本机离线签名 → 转正」，所以
 `releases/latest` 指向的永远是已签名的那一版。
 
