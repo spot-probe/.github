@@ -29,7 +29,7 @@ Rust 写的轻量服务器探针：agent 经 WebSocket / JSON-RPC 2.0 上报，h
 但**已不再跟随上游**：上游不再接受功能合入，这里走自己的 `main`。因此
 `git merge --ff-only upstream/main` **已不适用** —— 仓库不再是上游的纯镜像。
 
-其中 **agent 也会随本 fork 演进**，不只是 hub：ICMP 探测、IP 质量许可、流媒体解锁探测、
+其中 **agent 也会随本 fork 演进**，不只是 hub：ICMP 探测、IP 质量许可、
 远程升级的开关上报，都需要 agent 侧配合。所以**升级 hub 不一定够** —— 有些版本会要求 agent 先升。
 面板在保存任务**之前**就会提示哪些节点的 agent 太旧；agent 有自己签名过的发布（见下表），
 也可以从面板批量下发升级。注意顺序：新开关会写进服务的启动参数，老 agent 不认识它就会**启动失败**，
@@ -52,9 +52,11 @@ Rust 写的轻量服务器探针：agent 经 WebSocket / JSON-RPC 2.0 上报，h
 - **后台重做**：新增「**总览**」页并作为默认落地页 —— 一行 KPI（在线 / 离线 / 总数 / 待升级 /
   30 天内到期 / 已过期）、一张**续费日历**（每天挂「N 台」，集中到期日高亮，点某天看那天的节点）、
   近期事项与 Agent 版本一览；全队趋势图（流量 / 带宽 / 资源，资源图带「最热那台」的 P95 分布带）。
-  延迟页能展开看**哪台节点在拖后腿**（分桶直方图 + 百分位区间带），并有一张**延迟分布热力图**
-  （区间边界由当前窗口的分位数算，配一行丢包条；分位图按缺口分段，所以「这段彻底不通」在图上看得见，
-  窗口可选 1 小时 / 6 小时 / 24 小时 / 7 天），节点表有「只看待升级」开关；
+  延迟页能展开看**哪台节点在拖后腿**（分桶直方图 + 百分位区间带），并有一张**延迟分布矩阵**
+  （时间 × 延迟区间的堆叠柱，区间边界由当前窗口的分位数算，配一行丢包条；分位图按缺口分段，所以
+  「这段彻底不通」在图上看得见，窗口可选 1 小时 / 6 小时 / 24 小时 / 7 天），节点表有「只看待升级」开关；
+  安装命令里的地址可以与面板的站点地址分开（**设置** → **站点** → **agent 连接地址**），
+  面板挂一个域名、节点走另一个入口时不用再手改命令；
   节点还可以加一条**私有备注**——只在管理后台出现，公开页任何情况下都不显示；「30 天内到期」那张
   KPI 卡点开就是一行一台，行尾「我已续费」二次确认后续一期（也支持按分组续），
   **由人说「我续了」、hub 只执行**——而不是 hub 自己猜「你没续费」，那会把真正的到期警报盖掉
@@ -66,11 +68,6 @@ Rust 写的轻量服务器探针：agent 经 WebSocket / JSON-RPC 2.0 上报，h
   IPv4 与 IPv6 都支持；`monitor-agent --ping <host>` 可以在目标机器上先自检能不能发 ICMP、
   不能的话是权限还是路由；**探测失败的原因显示在面板上**，权限不足不再表现为一条没有解释的 100% 丢包；
   agent 太旧时也**明确说出来**（ICMP 需要 agent ≥ 1.1.1，面板在保存任务**之前**就会提示哪些节点太旧）
-- **流媒体解锁探测**：agent 每 6 小时（**按节点错开**、重启不触发风暴）探一次
-  Netflix / ChatGPT / YouTube / Amazon Prime Video / Reddit / TikTok，结果上报后面板有「节点实测」列
-  与探测历史点阵；判据照 xykt 的 IPQuality 实现。`monitor-agent --probe-once` 能让 agent 自己说出
-  它到底读到了什么（URL / 状态码 / 正文长度 / 各标记出现次数），不用靠猜。
-  与 IP 质量共用同一个许可开关
 - **历史保留 7 → 90 天**（可设 1–365）：分钟数据折叠进小时汇总表，长窗口跨水位线拼接读取；
   `/api/me` 报 `history_days`，公开页的档位阶梯跟着它走，不再写死
 - **可用率与故障历史**：`uptime{d7,d30}` 与 `series=availability` 接口，公开页出时间轴与故障列表
@@ -96,10 +93,11 @@ Rust 写的轻量服务器探针：agent 经 WebSocket / JSON-RPC 2.0 上报，h
   `monitor-agent is running (pid N)` 与 `connected to <hub>`；连不上就大声警告但不让安装失败，
   并给出**真实路径**的 `${BIN} --ping 1.1.1.1` 自检命令与 `net.ipv4.ping_group_range` 的前提检查
 - **通知**：agent 与 hub 有新版本时提醒（搭在每日那次检查上，不另开轮询，每个版本只说一次）；
-  另有**流量报告**——日报 / 周报 / 月报 / 半年报 / 年报，按天快照求和，报文里写明「本期覆盖 N 天」
+  另有**流量报告**——日报 / 周报 / 月报 / 季报 / 半年报 / 年报，按天快照求和，报文里写明「本期覆盖 N 天」
   （半年报与年报的诚实底线），明细限 Top 20（Telegram 单条 4096 字符的上限）。
-  **Telegram 还能问**：`/status` `/nodes` `/node <名字>` `/traffic` `/probe` 这几个只读命令——
-  走长轮询（自建 hub 常常只有出网），只认设置里的那个会话，投递结果也落库、在面板里看得见
+  **Telegram 还能问**：`/nodes` `/node <名字>` `/traffic` `/expiry` `/cost` `/report` `/uptime`
+  `/upgrade <名字>` `/mute` `/muted` `/whoami` ——走长轮询（自建 hub 常常只有出网），只认设置里的
+  那个会话，投递结果也落库、在面板里看得见
 - **节点地址与国家**：按节点自身地址查，也可以手填
 - **IP 质量与风险**：hub 自己下 IP 库（城市 / ASN / Tor 三个镜像可配、URL 支持日期占位符、
   免费库的压缩包直接解，边收边写盘所以内存与库大小脱钩），**离线也能给出质量**；在线风险库则把
@@ -117,12 +115,12 @@ Rust 写的轻量服务器探针：agent 经 WebSocket / JSON-RPC 2.0 上报，h
 
 | 仓库 | 最新发布 | 产物 |
 |:--|:--|:--|
-| monitor | [v1.12.25](https://github.com/spot-probe/monitor/releases/tag/v1.12.25) | 两个 musl 架构的 hub 二进制 + `install-hub.sh` + `sha256sums.txt` |
-| agent | [v1.1.17](https://github.com/spot-probe/agent/releases/tag/v1.1.17) | 两个 musl 架构的 agent 二进制（**各带一份 `.minisig` 签名**）+ `sha256sums.txt` |
-| monitor-theme-default | [v1.8.21](https://github.com/spot-probe/monitor-theme-default/releases/tag/v1.8.21) | `theme.tar.gz` + `theme.tar.gz.sha256` |
+| monitor | [v1.13.11](https://github.com/spot-probe/monitor/releases/tag/v1.13.11) | 两个 musl 架构的 hub 二进制 + `install-hub.sh` + `sha256sums.txt` |
+| agent | [v1.1.18](https://github.com/spot-probe/agent/releases/tag/v1.1.18) | 两个 musl 架构的 agent 二进制（**各带一份 `.minisig` 签名**）+ `sha256sums.txt` |
+| monitor-theme-default | [v1.8.23](https://github.com/spot-probe/monitor-theme-default/releases/tag/v1.8.23) | `theme.tar.gz` + `theme.tar.gz.sha256` |
 | monitor-document | — | 无 release，由 Cloudflare Workers 构建发布 |
 
-hub 内置的主题版本由 `monitor` 仓库里的 `web-theme.pin` 钉住（含发布物的 sha256，当前指向 `v1.8.21`），
+hub 内置的主题版本由 `monitor` 仓库里的 `web-theme.pin` 钉住（含发布物的 sha256，当前指向 `v1.8.23`），
 升级要 pin 与版本号一起改。agent 的发布走「CI 出草稿 → 本机离线签名 → 转正」，所以
 `releases/latest` 指向的永远是已签名的那一版。
 
